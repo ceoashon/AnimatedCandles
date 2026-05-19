@@ -1,9 +1,3 @@
-# Build with: pyinstaller AnimatedCandles.spec
-# Produces:   dist/AnimatedCandles.app  (macOS .app bundle)
-# Requires:   pip install pyinstaller
-
-block_cipher = None
-
 a = Analysis(
     ['animated_candles.py'],
     pathex=[],
@@ -18,13 +12,10 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zlib_archive, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
@@ -35,11 +26,10 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    console=False,          # windowed=True — no terminal window
-    disable_windowed_traceback=False,
-    argv_emulation=False,   # macOS: let Tkinter handle events natively
-    target_arch=None,       # universal binary when None; set 'arm64' or 'x86_64' to pin
+    upx=False,
+    console=False,
+    argv_emulation=False,
+    target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
 )
@@ -50,7 +40,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name='AnimatedCandles',
 )
@@ -58,7 +48,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='AnimatedCandles.app',
-    icon=None,              # replace with 'AnimatedCandles.icns' if you have one
+    icon=None,
     bundle_identifier='com.animatedcandles.app',
     info_plist={
         'NSHighResolutionCapable': True,
