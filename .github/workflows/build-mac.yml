@@ -1,0 +1,40 @@
+name: Build Mac App
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Tcl/Tk for tkinter
+        run: brew install tcl-tk@8
+
+      - name: Install Python dependencies
+        run: pip install pyinstaller tkmacosx
+
+      - name: Build .app bundle
+        run: pyinstaller AnimatedCandles.spec
+
+      - name: Zip the .app
+        run: |
+          cd dist
+          zip -r AnimatedCandles-Mac.zip AnimatedCandles.app
+
+      - name: Upload finished app
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnimatedCandles-Mac
+          path: dist/AnimatedCandles-Mac.zip
+          retention-days: 30
