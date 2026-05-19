@@ -25,7 +25,7 @@ jobs:
         run: pip install pyinstaller tkmacosx
 
       - name: Build .app bundle
-        run: pyinstaller --icon icon.icns AnimatedCandles.spec
+        run: pyinstaller AnimatedCandles.spec
 
       - name: Zip the .app
         run: |
