@@ -53,7 +53,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='AnimatedCandles.app',
-    icon=None,
+    icon='icon.icns',
     bundle_identifier='com.animatedcandles.app',
     info_plist={
         'NSHighResolutionCapable': True,
