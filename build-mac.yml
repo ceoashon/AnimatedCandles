@@ -18,6 +18,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install Tcl/Tk for tkinter
+        run: brew install tcl-tk@8
+
       - name: Install PyInstaller
         run: pip install pyinstaller
 
