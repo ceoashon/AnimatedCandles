@@ -167,7 +167,7 @@ class CandlestickDrawerApp:
 
         def sep() -> None:
             tk.Frame(toolbar, width=1, bg=_SEP).pack(
-                side=tk.LEFT, fill=tk.Y, padx=2, pady=3)
+                side=tk.LEFT, fill=tk.Y, padx=1, pady=3)
 
         def tbtn(text: str, cmd, bg: str = _BTN, fg: str = _BTN_FG,
                  abg: str | None = None, **kw):
@@ -175,35 +175,33 @@ class CandlestickDrawerApp:
                 toolbar, text=text, command=cmd,
                 bg=bg, fg=fg,
                 activebackground=abg or bg, activeforeground=fg,
-                relief=tk.FLAT, padx=3, pady=1,
+                relief=tk.FLAT, padx=0, pady=0,
                 font=("Arial", 9),
                 **kw)
-            b.pack(side=tk.LEFT, padx=(0, 2))
+            b.pack(side=tk.LEFT, ipadx=3, ipady=1, padx=(0, 2))
             return b
 
         # ── Undo / Redo ────────────────────────────────────────────────────
         self.undo_btn = PLATFORM_BUTTON(
-            toolbar, text="< Back", command=self.undo_candle,
+            toolbar, text="◀", command=self.undo_candle,
             bg=_BTN, fg=_BTN_FG,
             activebackground="#3d3d3d", activeforeground=_BTN_FG,
-            relief=tk.FLAT, padx=3, pady=1,
+            relief=tk.FLAT, padx=0, pady=0,
             font=("Arial", 9),
             state=tk.DISABLED)
-        self.undo_btn.pack(side=tk.LEFT, padx=(0, 2))
+        self.undo_btn.pack(side=tk.LEFT, ipadx=3, ipady=1, padx=(0, 1))
 
         self.redo_btn = PLATFORM_BUTTON(
-            toolbar, text="Fwd >", command=self.redo_candle,
+            toolbar, text="▶", command=self.redo_candle,
             bg=_BTN, fg=_BTN_FG,
             activebackground="#3d3d3d", activeforeground=_BTN_FG,
-            relief=tk.FLAT, padx=3, pady=1,
+            relief=tk.FLAT, padx=0, pady=0,
             font=("Arial", 9),
             state=tk.DISABLED)
-        self.redo_btn.pack(side=tk.LEFT, padx=(0, 2))
+        self.redo_btn.pack(side=tk.LEFT, ipadx=3, ipady=1, padx=(0, 2))
         sep()
 
         # ── Pane count [1][2][3][4] ────────────────────────────────────────
-        tk.Label(toolbar, text="Panes:", bg=_TB, fg=_DIM,
-                 font=("Arial", 9)).pack(side=tk.LEFT, padx=(0, 2))
         self._pane_count_btns: list = []
         for n in range(1, 5):
             active = (n == self.pane_count)
@@ -213,9 +211,9 @@ class CandlestickDrawerApp:
                 bg="#4a4a4a" if active else _BTN,
                 fg=_BTN_FG if active else _DIM,
                 activebackground="#4a4a4a", activeforeground=_BTN_FG,
-                relief=tk.FLAT, padx=2, pady=1,
+                relief=tk.FLAT, padx=0, pady=0,
                 font=("Arial", 9, "bold"))
-            b.pack(side=tk.LEFT, padx=(0, 1))
+            b.pack(side=tk.LEFT, ipadx=2, ipady=1, padx=(0, 1))
             self._pane_count_btns.append(b)
 
         # Orientation toggle
@@ -224,9 +222,9 @@ class CandlestickDrawerApp:
             command=self.toggle_orientation,
             bg=_BTN, fg=_BTN_FG,
             activebackground="#3d3d3d", activeforeground=_BTN_FG,
-            relief=tk.FLAT, padx=2, pady=1,
+            relief=tk.FLAT, padx=0, pady=0,
             font=("Arial", 9))
-        self._orient_btn.pack(side=tk.LEFT, padx=(2, 2))
+        self._orient_btn.pack(side=tk.LEFT, ipadx=2, ipady=1, padx=(0, 2))
         self.update_orientation_button_label()
         self.update_orientation_button_visibility()
         sep()
@@ -238,17 +236,17 @@ class CandlestickDrawerApp:
 
         for i, pane in enumerate(self.panes):
             frame = tk.Frame(self._tf_frame, bg=_TB)
-            frame.grid(row=0, column=i, padx=(0, 3))
-            tk.Label(frame, text=f"P{i + 1}:", bg=_TB, fg=_DIM,
+            frame.grid(row=0, column=i, padx=(0, 2))
+            tk.Label(frame, text=f"{i + 1}:", bg=_TB, fg=_DIM,
                      font=("Arial", 9)).pack(side=tk.LEFT)
             btn = PLATFORM_BUTTON(
                 frame, text=pane["tf_label"],
                 bg="#1e3a5f", fg=_BTN_FG,
                 activebackground="#2d5a8e", activeforeground=_BTN_FG,
-                relief=tk.FLAT, padx=4, pady=1,
+                relief=tk.FLAT, padx=0, pady=0,
                 font=("Arial", 9, "bold"))
             btn.configure(command=self._make_tf_cmd(i, btn))
-            btn.pack(side=tk.LEFT)
+            btn.pack(side=tk.LEFT, ipadx=3, ipady=1)
             pane["tf_btn"]      = btn
             pane["tf_selector"] = btn
             self._tf_selector_frames.append(frame)
@@ -256,59 +254,57 @@ class CandlestickDrawerApp:
         # TF validation error label
         self._tf_error_lbl = tk.Label(
             self._tf_frame, textvariable=self.tf_error_var,
-            bg=_TB, fg="#ff5555", font=("TkDefaultFont", 9))
-        self._tf_error_lbl.grid(row=0, column=4, padx=(0, 4))
+            bg=_TB, fg="#ff5555", font=("Arial", 9))
+        self._tf_error_lbl.grid(row=0, column=4, padx=(0, 2))
         sep()
 
         # ── Pencil three-state ─────────────────────────────────────────────
         self.pencil_border_frame = tk.Frame(toolbar, bd=2, relief=tk.FLAT, bg=_TB)
         self.pencil_btn = PLATFORM_BUTTON(
-            self.pencil_border_frame, text="Draw",
+            self.pencil_border_frame, text="✏",
             command=self.toggle_pencil,
             bg=_BTN, fg=_DIM,
             activebackground=_BTN, activeforeground=_BTN_FG,
-            relief=tk.FLAT, padx=4, pady=1,
+            relief=tk.FLAT, padx=0, pady=0,
             font=("Arial", 9))
-        self.pencil_btn.pack()
+        self.pencil_btn.pack(ipadx=3, ipady=1)
         self.pencil_border_frame.pack(side=tk.LEFT, padx=(0, 2))
 
         # ── Eraser ────────────────────────────────────────────────────────
         self._eraser_btn = PLATFORM_BUTTON(
-            toolbar, text="Erase", command=self._toggle_eraser,
+            toolbar, text="⌫", command=self._toggle_eraser,
             bg="#4a1e1e", fg="#e05555",
             activebackground="#6a2a2a", activeforeground="#ff6666",
-            relief=tk.FLAT, padx=4, pady=1,
+            relief=tk.FLAT, padx=0, pady=0,
             font=("Arial", 9))
-        self._eraser_btn.pack(side=tk.LEFT, padx=(0, 2))
+        self._eraser_btn.pack(side=tk.LEFT, ipadx=3, ipady=1, padx=(0, 2))
         sep()
 
         # ── Style / Strat ──────────────────────────────────────────────────
         tbtn("Style", self._open_style_settings,
              bg="#2d2d4a", fg="#8888ff", abg="#3d3d5a")
         tk.Checkbutton(
-            toolbar, text="Strat #s", variable=self.show_strat,
+            toolbar, text="Strat#", variable=self.show_strat,
             command=self._on_strat_toggle,
             bg=_TB, fg=_BTN_FG, selectcolor=_BTN,
             activebackground=_TB, activeforeground=_BTN_FG,
             font=("Arial", 9),
-        ).pack(side=tk.LEFT, padx=(0, 3))
+        ).pack(side=tk.LEFT, padx=(0, 2))
         sep()
 
         # ── Replay ────────────────────────────────────────────────────────
-        tbtn("Replay", self._start_replay, bg="#1e4a1e", fg="#00cc00", abg="#2a6a2a")
-        tbtn("Stop",   self._stop_replay,  bg="#4a1e1e", fg="#cc0000", abg="#6a2a2a")
+        tbtn("▶", self._start_replay, bg="#1e4a1e", fg="#00cc00", abg="#2a6a2a")
+        tbtn("■", self._stop_replay,  bg="#4a1e1e", fg="#cc0000", abg="#6a2a2a")
         tk.Checkbutton(
             toolbar, text="Loop", variable=self.loop_replay,
             bg=_TB, fg=_BTN_FG, selectcolor=_BTN,
             activebackground=_TB, activeforeground=_BTN_FG,
             font=("Arial", 9),
         ).pack(side=tk.LEFT, padx=(0, 2))
-        tk.Label(toolbar, text="Spd:", bg=_TB, fg=_DIM,
-                 font=("Arial", 9)).pack(side=tk.LEFT, padx=(0, 1))
         tk.Scale(
             toolbar, variable=self.replay_speed,
             from_=0.01, to=0.30, resolution=0.01,
-            orient=tk.HORIZONTAL, length=70,
+            orient=tk.HORIZONTAL, length=55,
             bg=_TB, fg=_BTN_FG, highlightthickness=0, troughcolor=_BTN,
         ).pack(side=tk.LEFT, padx=(0, 2))
         sep()
@@ -316,14 +312,14 @@ class CandlestickDrawerApp:
         # ── Canvas size + Clear ────────────────────────────────────────────
         tk.Label(toolbar, text="W:", bg=_TB, fg=_DIM,
                  font=("Arial", 9)).pack(side=tk.LEFT, padx=(0, 1))
-        self.width_entry = tk.Entry(toolbar, width=4, bg=_BTN, fg=_BTN_FG,
+        self.width_entry = tk.Entry(toolbar, width=3, bg=_BTN, fg=_BTN_FG,
                                     insertbackground=_BTN_FG, relief=tk.FLAT)
         self.width_entry.insert(0, str(self._canvas_w))
-        self.width_entry.pack(side=tk.LEFT, padx=(0, 2))
+        self.width_entry.pack(side=tk.LEFT, padx=(0, 1))
 
         tk.Label(toolbar, text="H:", bg=_TB, fg=_DIM,
                  font=("Arial", 9)).pack(side=tk.LEFT, padx=(0, 1))
-        self.height_entry = tk.Entry(toolbar, width=4, bg=_BTN, fg=_BTN_FG,
+        self.height_entry = tk.Entry(toolbar, width=3, bg=_BTN, fg=_BTN_FG,
                                      insertbackground=_BTN_FG, relief=tk.FLAT)
         self.height_entry.insert(0, str(self._canvas_h))
         self.height_entry.pack(side=tk.LEFT, padx=(0, 2))
