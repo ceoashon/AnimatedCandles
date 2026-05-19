@@ -139,8 +139,8 @@ class CandlestickDrawerApp:
         self._suppress_next_left_release = False
 
         # ── Eraser ────────────────────────────────────────────────────────
-        self.tool_mode  = "pencil"   # "pencil" | "eraser"
-        self.is_erasing = False
+        self.eraser_state = 0   # 0=off, 1=erase lines/drawings, 2=erase all incl. candles
+        self.is_erasing   = False
 
         # ── Undo / redo ───────────────────────────────────────────────────
         self.redo_stack: list[dict] = []
@@ -340,7 +340,7 @@ class CandlestickDrawerApp:
         """Open a custom dark TF selection dropdown below anchor."""
         popup = tk.Toplevel(self.root)
         popup.wm_overrideredirect(True)
-        popup.configure(bg="#1e1e1e")
+        popup.configure(bg="#1e293b")
 
         x = anchor.winfo_rootx()
         y = anchor.winfo_rooty() + anchor.winfo_height()
@@ -358,10 +358,10 @@ class CandlestickDrawerApp:
             self.redraw_canvas()
 
         for tf_str in TF_OPTIONS:
-            item = tk.Button(
+            item = PLATFORM_BUTTON(
                 popup, text=tf_str, anchor="w",
-                bg="#1e1e1e", fg="#ffffff",
-                activebackground="#2d5a8e", activeforeground="#ffffff",
+                bg="#1e293b", fg="#e2e8f0",
+                activebackground="#2d5a8e", activeforeground="#f8fafc",
                 relief=tk.FLAT, padx=12, pady=4, width=8,
                 command=lambda t=tf_str: select(t))
             item.pack(fill=tk.X)
@@ -766,7 +766,7 @@ class CandlestickDrawerApp:
     def on_left_press(self, event: tk.Event) -> None:
         if self.moving_line is not None:
             return
-        if self.tool_mode == "eraser":
+        if self.eraser_state > 0:
             self.is_erasing = True
             self.erase_at(event.x, event.y)
             return
@@ -972,7 +972,7 @@ class CandlestickDrawerApp:
     # ── Double-click handlers ────────────────────────────────────────────────
 
     def on_double_left_click(self, event: tk.Event) -> None:
-        if self.tool_mode == "eraser":
+        if self.eraser_state > 0:
             return
         hit = self.find_line_at(event.x, event.y)
         if hit is not None:
@@ -983,7 +983,7 @@ class CandlestickDrawerApp:
             self._suppress_next_left_release = True
 
     def enter_line_mode(self, event: tk.Event) -> None:
-        if self.tool_mode == "eraser":
+        if self.eraser_state > 0:
             return
         self.line_mode  = True
         self.line_phase = 1
@@ -1075,16 +1075,19 @@ class CandlestickDrawerApp:
             self.pencil_border_frame.config(bg="#FFD700")
 
     def _toggle_eraser(self) -> None:
-        if self.tool_mode == "eraser":
-            self.tool_mode = "pencil"
+        self.eraser_state = (self.eraser_state + 1) % 3
+        self._update_eraser_visual()
+        cv = self.panes[0]["canvas"] if self.panes and self.panes[0]["canvas"] else None
+        if cv:
+            cv.config(cursor="X_cursor" if self.eraser_state > 0 else "crosshair")
+
+    def _update_eraser_visual(self) -> None:
+        if self.eraser_state == 0:
             self._eraser_btn.config(bg="#4a1e1e", fg="#e05555", relief=tk.FLAT)
-            if self.panes and self.panes[0]["canvas"]:
-                self.panes[0]["canvas"].config(cursor="crosshair")
-        else:
-            self.tool_mode = "eraser"
+        elif self.eraser_state == 1:
             self._eraser_btn.config(bg="#6a2a2a", fg="#ff6666", relief=tk.SUNKEN)
-            if self.panes and self.panes[0]["canvas"]:
-                self.panes[0]["canvas"].config(cursor="X_cursor")
+        else:
+            self._eraser_btn.config(bg="#4a3a00", fg="#FFD700", relief=tk.SUNKEN)
 
     # ── Eraser ───────────────────────────────────────────────────────────────
 
@@ -1121,6 +1124,21 @@ class CandlestickDrawerApp:
             if hit:
                 cv.delete(stroke["canvas_id"])
                 self.freehand_strokes.remove(stroke)
+
+        if self.eraser_state == 2:
+            hw = self.candle_width // 2 + eraser_r
+            candles_changed = False
+            for candle in self.panes[0]["candles"][:]:
+                if (abs(x - candle["x"]) <= hw
+                        and candle["high_y"] - eraser_r <= y <= candle["low_y"] + eraser_r):
+                    self.panes[0]["candles"].remove(candle)
+                    candles_changed = True
+            if candles_changed:
+                self.current_candle = None
+                self.redo_stack.clear()
+                self.update_undo_redo_buttons()
+                self.recompute_all_htf()
+                self.redraw_canvas()
 
     # ── Undo / Redo ──────────────────────────────────────────────────────────
 
