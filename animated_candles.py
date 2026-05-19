@@ -362,10 +362,12 @@ class CandlestickDrawerApp:
                 popup, text=tf_str, anchor="w",
                 bg="#1e293b", fg="#e2e8f0",
                 activebackground="#2d5a8e", activeforeground="#f8fafc",
-                relief=tk.FLAT, padx=12, pady=4, width=8,
+                relief=tk.FLAT, padx=20, pady=6,
                 command=lambda t=tf_str: select(t))
             item.pack(fill=tk.X)
 
+        popup.update_idletasks()
+        popup.minsize(max(120, popup.winfo_reqwidth()), 1)
         popup.bind("<FocusOut>", lambda e: popup.destroy())
         popup.focus_force()
 
@@ -774,6 +776,9 @@ class CandlestickDrawerApp:
 
     def on_left_motion(self, event: tk.Event) -> None:
         if self.is_erasing:
+            cv = self.panes[0]["canvas"]
+            if cv:
+                self._draw_eraser_cursor(cv, event.x, event.y)
             self.erase_at(event.x, event.y)
             return
         if self.moving_line is not None:
@@ -939,12 +944,24 @@ class CandlestickDrawerApp:
 
     # ── Motion handler ───────────────────────────────────────────────────────
 
+    def _draw_eraser_cursor(self, cv: tk.Canvas, x: int, y: int) -> None:
+        cv.delete("cursor_dot")
+        r = 10
+        cv.create_oval(x - r, y - r, x + r, y + r,
+                       outline="#FFD700", width=2, tags="cursor_dot")
+        cv.create_line(x - r, y, x + r, y, fill="#FFD700", width=1, tags="cursor_dot")
+        cv.create_line(x, y - r, x, y + r, fill="#FFD700", width=1, tags="cursor_dot")
+
     def on_mouse_motion(self, event: tk.Event) -> None:
         cv = self.panes[0]["canvas"]
         if cv is None:
             return
 
         cv.delete("cursor_dot")
+
+        if self.eraser_state > 0:
+            self._draw_eraser_cursor(cv, event.x, event.y)
+            return
 
         if not self.line_mode:
             return
@@ -1079,7 +1096,7 @@ class CandlestickDrawerApp:
         self._update_eraser_visual()
         cv = self.panes[0]["canvas"] if self.panes and self.panes[0]["canvas"] else None
         if cv:
-            cv.config(cursor="X_cursor" if self.eraser_state > 0 else "crosshair")
+            cv.config(cursor="none" if self.eraser_state > 0 else "crosshair")
 
     def _update_eraser_visual(self) -> None:
         if self.eraser_state == 0:
