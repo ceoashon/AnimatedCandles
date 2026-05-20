@@ -295,6 +295,17 @@ class CandlestickDrawerApp:
             orient=tk.HORIZONTAL, length=50,
             bg=_TB, fg=_BTN_FG, highlightthickness=0, troughcolor=_BTN,
         ).pack(side=tk.LEFT, padx=(0, 1))
+        tk.Label(toolbar, text="Sz:", bg=_TB, fg=_DIM, font=F
+                 ).pack(side=tk.LEFT, padx=(0, 0))
+        self._size_scale = tk.Scale(
+            toolbar,
+            from_=4, to=100, resolution=2,
+            orient=tk.HORIZONTAL, length=50,
+            bg=_TB, fg=_BTN_FG, highlightthickness=0, troughcolor=_BTN,
+            command=self._apply_candle_size,
+        )
+        self._size_scale.set(self.candle_width)
+        self._size_scale.pack(side=tk.LEFT, padx=(0, 1))
         sep()
 
         # ── Canvas size + Clear ────────────────────────────────────────────
@@ -542,6 +553,19 @@ class CandlestickDrawerApp:
         for pane in self.panes:
             if pane["canvas"]:
                 pane["canvas"].config(width=w, height=h)
+        self.redraw_canvas()
+
+    def _apply_candle_size(self, val) -> None:
+        v = int(val)
+        self.candle_width       = v
+        self.candle_spacing     = max(2, v * 8 // 20)
+        self.htf_candle_width   = v * 3 // 2
+        self.htf_candle_spacing = max(2, v * 14 // 20)
+        for i, c in enumerate(self.panes[0]["candles"]):
+            c["x"] = self._ltf_x(i)
+        if self.current_candle is not None:
+            self.current_candle["x"] = self._ltf_x(len(self.panes[0]["candles"]))
+        self.recompute_all_htf()
         self.redraw_canvas()
 
     # ── Clear ────────────────────────────────────────────────────────────────
