@@ -96,9 +96,10 @@ class CandlestickDrawerApp:
         self._replay_thread: threading.Thread | None = None
 
         # ── UI string/bool vars ────────────────────────────────────────────
-        self.show_strat   = tk.BooleanVar(value=False)
-        self.replay_speed = tk.DoubleVar(value=0.05)
-        self.loop_replay  = tk.BooleanVar(value=False)
+        self.show_strat       = tk.BooleanVar(value=False)
+        self.strat_label_size = tk.IntVar(value=11)
+        self.replay_speed     = tk.DoubleVar(value=0.05)
+        self.loop_replay      = tk.BooleanVar(value=False)
         self.tf_error_var = tk.StringVar(value="")
         self.status_var   = tk.StringVar(
             value="Draw a candle: left-click and drag on P1")
@@ -278,6 +279,15 @@ class CandlestickDrawerApp:
             command=self._on_strat_toggle,
             bg=_TB, fg=_BTN_FG, selectcolor=_BTN,
             activebackground=_TB, activeforeground=_BTN_FG, font=F,
+        ).pack(side=tk.LEFT, padx=(0, 1))
+        tk.Label(toolbar, text="#Sz:", bg=_TB, fg=_DIM, font=F
+                 ).pack(side=tk.LEFT, padx=(0, 0))
+        tk.Scale(
+            toolbar, variable=self.strat_label_size,
+            from_=6, to=28, resolution=1,
+            orient=tk.HORIZONTAL, length=40,
+            bg=_TB, fg=_BTN_FG, highlightthickness=0, troughcolor=_BTN,
+            command=lambda v: self.redraw_canvas(),
         ).pack(side=tk.LEFT, padx=(0, 1))
         sep()
 
@@ -692,19 +702,21 @@ class CandlestickDrawerApp:
                          label: str, style: StyleConfig) -> None:
         if not label:
             return
+        sz   = self.strat_label_size.get()
+        off  = sz + 1
+        font = ("Helvetica", sz, "bold")
         x, pos = candle["x"], style.label_position
         if pos == "above":
-            canvas.create_text(x, candle["high_y"] - 12, text=label,
-                                fill="white", font=("Helvetica", 11, "bold"),
-                                anchor=tk.S)
+            canvas.create_text(x, candle["high_y"] - off, text=label,
+                                fill="white", font=font, anchor=tk.S)
         elif pos == "inside":
             mid = (min(candle["open_y"], candle["close_y"]) +
                    max(candle["open_y"], candle["close_y"])) / 2
             canvas.create_text(x, mid, text=label,
-                                fill="white", font=("Helvetica", 11, "bold"))
+                                fill="white", font=font)
         else:
-            canvas.create_text(x, candle["low_y"] + 12, text=label,
-                                fill="white", font=("Helvetica", 11, "bold"))
+            canvas.create_text(x, candle["low_y"] + off, text=label,
+                                fill="white", font=font)
 
     def _draw_tf_label(self, canvas: tk.Canvas, label: str) -> None:
         canvas.create_rectangle(0, 0, 60, 20, fill="#1E1E1E", outline="")
