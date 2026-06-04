@@ -96,10 +96,12 @@ class CandlestickDrawerApp:
         self._replay_thread: threading.Thread | None = None
 
         # ── UI string/bool vars ────────────────────────────────────────────
-        self.show_strat       = tk.BooleanVar(value=False)
-        self.strat_label_size = tk.IntVar(value=11)
-        self.replay_speed     = tk.DoubleVar(value=0.05)
-        self.loop_replay      = tk.BooleanVar(value=False)
+        self.show_strat         = tk.BooleanVar(value=False)
+        self.strat_label_size   = tk.IntVar(value=11)
+        self.show_broadening    = tk.BooleanVar(value=False)
+        self.show_mini_bf       = tk.BooleanVar(value=False)
+        self.replay_speed       = tk.DoubleVar(value=0.05)
+        self.loop_replay        = tk.BooleanVar(value=False)
         self.tf_error_var = tk.StringVar(value="")
         self.status_var   = tk.StringVar(
             value="Draw a candle: left-click and drag on P1")
@@ -288,6 +290,18 @@ class CandlestickDrawerApp:
             orient=tk.HORIZONTAL, length=40,
             bg=_TB, fg=_BTN_FG, highlightthickness=0, troughcolor=_BTN,
             command=lambda v: self.redraw_canvas(),
+        ).pack(side=tk.LEFT, padx=(0, 1))
+        tk.Checkbutton(
+            toolbar, text="BF", variable=self.show_broadening,
+            command=self.redraw_canvas,
+            bg=_TB, fg=_BTN_FG, selectcolor=_BTN,
+            activebackground=_TB, activeforeground=_BTN_FG, font=F,
+        ).pack(side=tk.LEFT, padx=(0, 1))
+        tk.Checkbutton(
+            toolbar, text="Mini", variable=self.show_mini_bf,
+            command=self.redraw_canvas,
+            bg=_TB, fg=_BTN_FG, selectcolor=_BTN,
+            activebackground=_TB, activeforeground=_BTN_FG, font=F,
         ).pack(side=tk.LEFT, padx=(0, 1))
         sep()
 
@@ -762,6 +776,7 @@ class CandlestickDrawerApp:
             if self.show_strat.get() and prev:
                 self.draw_strat_label(cv, c, self.classify_candle(c, prev),
                                       self.style_config)
+        self._draw_all_broadening(cv, self.panes[0]["candles"], self.current_candle)
         for line in self.level_lines:
             line["canvas_line_id"] = cv.create_line(
                 line["x1"], line["y"], line["x2"], line["y"],
@@ -1291,6 +1306,7 @@ class CandlestickDrawerApp:
         if self.show_strat.get() and prev:
             self.draw_strat_label(cv0, frame, self.classify_candle(frame, prev),
                                   self.style_config)
+        self._draw_all_broadening(cv0, replayed, frame)
         self._draw_tf_label(cv0, self.panes[0]["tf_label"])
         self._update_status(frame)
 
@@ -1329,6 +1345,149 @@ class CandlestickDrawerApp:
 
     def _on_strat_toggle(self) -> None:
         self.redraw_canvas()
+
+    # ── Broadening Formation ──────────────────────────────────────────────────
+
+    def _compute_broadening(self, candles: list,
+                             current: dict | None = None) -> tuple:
+        """
+        Scan candles (+ optional live current candle) to find the first and
+        most-recent Higher-High and Lower-Low anchors.
+
+        Returns (hh_first, hh_last, ll_first, ll_last) as (x, y) pixel tuples,
+        or (None, None, None, None) when insufficient data.
+
+        Canvas convention: smaller y = higher price, larger y = lower price.
+        HH = candle whose high_y is LESS than the running minimum high_y.
+        LL = candle whose low_y  is MORE than the running maximum low_y.
+        """
+        all_c = list(candles) + ([current] if current else [])
+        if not all_c:
+            return None, None, None, None
+
+        c0 = all_c[0]
+        run_hh = c0["high_y"]
+        run_ll = c0["low_y"]
+        hh_first = hh_last = (c0["x"], run_hh)
+        ll_first = ll_last = (c0["x"], run_ll)
+
+        for c in all_c[1:]:
+            if c["high_y"] < run_hh:          # new higher high (lower y)
+                run_hh  = c["high_y"]
+                hh_last = (c["x"], run_hh)
+            if c["low_y"] > run_ll:            # new lower low (higher y)
+                run_ll  = c["low_y"]
+                ll_last = (c["x"], run_ll)
+
+        # Need at least one anchor to have moved for a meaningful line
+        if hh_last == hh_first and ll_last == ll_first:
+            return None, None, None, None
+
+        return hh_first, hh_last, ll_first, ll_last
+
+    def _project_line(self, p1: tuple, p2: tuple, ext: float) -> tuple:
+        """
+        Return (x1, y1, x3, y3) where (x3, y3) is p2 extended forward by
+        ext pixels along the slope of p1→p2.
+        """
+        x1, y1 = p1
+        x2, y2 = p2
+        if x2 > x1:
+            slope = (y2 - y1) / (x2 - x1)
+            return x1, y1, x2 + ext, y2 + slope * ext
+        return x1, y1, x2 + ext, y2          # flat if no horizontal span
+
+    def _draw_broadening_lines(self, cv: tk.Canvas, candles: list,
+                                current: dict | None = None,
+                                mini: bool = False,
+                                start: int = 0) -> None:
+        """Draw one pair of broadening formation trend lines on cv."""
+        src = candles[start:]
+        hh_f, hh_l, ll_f, ll_l = self._compute_broadening(
+            src, None if mini else current)
+        if hh_f is None:
+            return
+
+        step = self.candle_width + self.candle_spacing
+        ext  = 4 * step          # project ~4 candle-widths beyond last anchor
+
+        if mini:
+            fill, width, dash = "#aaaaaa", 1, (5, 3)
+        else:
+            fill, width, dash = "#ffffff", 2, ()
+
+        if hh_l != hh_f:
+            cv.create_line(*self._project_line(hh_f, hh_l, ext),
+                           fill=fill, width=width, dash=dash,
+                           tags="broadening")
+        if ll_l != ll_f:
+            cv.create_line(*self._project_line(ll_f, ll_l, ext),
+                           fill=fill, width=width, dash=dash,
+                           tags="broadening")
+
+    def _find_mini_bf_start(self, candles: list) -> int:
+        """
+        Detect the first 3-2-2 Strat pattern and find the candle index where
+        price hits the '3' candle's measured-move target.  Returns that index,
+        or -1 if not found / insufficient candles.
+
+        The measured move: range of the '3' candle projected from its boundary
+        in the direction implied by the two following '2' candles.
+        """
+        n = len(candles)
+        if n < 4:
+            return -1
+
+        # Classify each candle once
+        labels = [
+            self.classify_candle(candles[i], candles[i - 1] if i > 0 else None)
+            for i in range(n)
+        ]
+
+        for i in range(1, n - 2):
+            if labels[i] != "3":
+                continue
+            l1 = labels[i + 1]
+            l2 = labels[i + 2] if i + 2 < n else ""
+            # Both following candles must be some flavour of "2"
+            if "2" not in l1 or "2" not in l2:
+                continue
+
+            three  = candles[i]
+            rng    = three["low_y"] - three["high_y"]   # canvas-pixel range
+            if rng <= 0:
+                continue
+
+            # Direction from the second "2" candle
+            if "U" in l2:
+                # Bullish: target is ABOVE the 3-candle high (lower y)
+                target_y = three["high_y"] - rng
+                for j in range(i + 3, n):
+                    if candles[j]["high_y"] <= target_y:
+                        return j
+            elif "D" in l2:
+                # Bearish: target is BELOW the 3-candle low (higher y)
+                target_y = three["low_y"] + rng
+                for j in range(i + 3, n):
+                    if candles[j]["low_y"] >= target_y:
+                        return j
+            # Ambiguous direction — skip (don't guess)
+
+        return -1
+
+    def _draw_all_broadening(self, cv: tk.Canvas, candles: list,
+                              current: dict | None = None) -> None:
+        """Master broadening draw — called from both static redraw and replay."""
+        if not self.show_broadening.get():
+            return
+        # Macro formation: full candle history
+        self._draw_broadening_lines(cv, candles, current, mini=False, start=0)
+        # Mini formation: scoped to post-3-2-2 target hit
+        if self.show_mini_bf.get():
+            start = self._find_mini_bf_start(candles)
+            if start >= 0:
+                self._draw_broadening_lines(cv, candles, current,
+                                             mini=True, start=start)
 
     # ── Style Settings modal ─────────────────────────────────────────────────
 
