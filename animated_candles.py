@@ -1,5 +1,5 @@
 """
-AnimatedCandles — Candlestick Chart Drawing and Teaching Tool
+Strat Candle Drawer — Candlestick Chart Drawing and Teaching Tool
 Requirements: Python 3.11+; macOS also needs: pip install tkmacosx
 Run:   python3 animated_candles.py
 Build: pyinstaller AnimatedCandles.spec
@@ -77,7 +77,7 @@ class CandlestickDrawerApp:
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("AnimatedCandles")
+        self.root.title("Strat Candle Drawer")
         self.root.minsize(1200, 700)
         self.root.configure(bg=_BG)
 

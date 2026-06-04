@@ -27,7 +27,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='AnimatedCandles',
+    name='StratCandleDrawer',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -47,18 +47,18 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name='AnimatedCandles',
+    name='StratCandleDrawer',
 )
 
 app = BUNDLE(
     coll,
-    name='AnimatedCandles.app',
+    name='StratCandleDrawer.app',
     icon='icon.icns',
-    bundle_identifier='com.animatedcandles.app',
+    bundle_identifier='com.stratcandledrawer.app',
     info_plist={
         'NSHighResolutionCapable': True,
         'CFBundleShortVersionString': '1.0.0',
         'CFBundleVersion': '1',
-        'NSHumanReadableCopyright': 'AnimatedCandles',
+        'NSHumanReadableCopyright': 'StratCandleDrawer',
     },
 )

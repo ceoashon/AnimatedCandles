@@ -30,11 +30,11 @@ jobs:
       - name: Zip the .app
         run: |
           cd dist
-          zip -r AnimatedCandles-Mac.zip AnimatedCandles.app
+          zip -r StratCandleDrawer-Mac.zip StratCandleDrawer.app
 
       - name: Upload finished app
         uses: actions/upload-artifact@v4
         with:
-          name: AnimatedCandles-Mac
-          path: dist/AnimatedCandles-Mac.zip
+          name: StratCandleDrawer-Mac
+          path: dist/StratCandleDrawer-Mac.zip
           retention-days: 30
