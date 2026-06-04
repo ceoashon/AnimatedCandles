@@ -1351,15 +1351,14 @@ class CandlestickDrawerApp:
     def _compute_broadening(self, candles: list,
                              current: dict | None = None) -> tuple:
         """
-        Scan candles (+ optional live current candle) to find the first and
-        most-recent Higher-High and Lower-Low anchors.
+        Collect every HH and LL pivot across the candle list, then return
+        the LAST TWO pivots from each list — giving a rolling two-point
+        connection that always sits flush to the most recent price structure.
 
-        Returns (hh_first, hh_last, ll_first, ll_last) as (x, y) pixel tuples,
-        or (None, None, None, None) when insufficient data.
+        Returns (hh_prev, hh_last, ll_prev, ll_last) as (x, y) pixel tuples,
+        or (None, None, None, None) when fewer than two pivots exist for both.
 
         Canvas convention: smaller y = higher price, larger y = lower price.
-        HH = candle whose high_y is LESS than the running minimum high_y.
-        LL = candle whose low_y  is MORE than the running maximum low_y.
         """
         all_c = list(candles) + ([current] if current else [])
         if not all_c:
@@ -1368,22 +1367,27 @@ class CandlestickDrawerApp:
         c0 = all_c[0]
         run_hh = c0["high_y"]
         run_ll = c0["low_y"]
-        hh_first = hh_last = (c0["x"], run_hh)
-        ll_first = ll_last = (c0["x"], run_ll)
+        hh_pivots = [(c0["x"], run_hh)]
+        ll_pivots  = [(c0["x"], run_ll)]
 
         for c in all_c[1:]:
-            if c["high_y"] < run_hh:          # new higher high (lower y)
-                run_hh  = c["high_y"]
-                hh_last = (c["x"], run_hh)
-            if c["low_y"] > run_ll:            # new lower low (higher y)
-                run_ll  = c["low_y"]
-                ll_last = (c["x"], run_ll)
+            if c["high_y"] < run_hh:        # new higher high (lower y on canvas)
+                run_hh = c["high_y"]
+                hh_pivots.append((c["x"], run_hh))
+            if c["low_y"] > run_ll:         # new lower low (higher y on canvas)
+                run_ll = c["low_y"]
+                ll_pivots.append((c["x"], run_ll))
 
-        # Need at least one anchor to have moved for a meaningful line
-        if hh_last == hh_first and ll_last == ll_first:
+        # Need at least two pivots in each list for a rolling two-point line
+        hh_prev = hh_pivots[-2] if len(hh_pivots) >= 2 else None
+        hh_last = hh_pivots[-1] if len(hh_pivots) >= 2 else None
+        ll_prev = ll_pivots[-2] if len(ll_pivots) >= 2 else None
+        ll_last = ll_pivots[-1] if len(ll_pivots) >= 2 else None
+
+        if hh_prev is None and ll_prev is None:
             return None, None, None, None
 
-        return hh_first, hh_last, ll_first, ll_last
+        return hh_prev, hh_last, ll_prev, ll_last
 
     def _project_line(self, p1: tuple, p2: tuple, ext: float) -> tuple:
         """
@@ -1427,51 +1431,32 @@ class CandlestickDrawerApp:
 
     def _find_mini_bf_start(self, candles: list) -> int:
         """
-        Detect the first 3-2-2 Strat pattern and find the candle index where
-        price hits the '3' candle's measured-move target.  Returns that index,
-        or -1 if not found / insufficient candles.
-
-        The measured move: range of the '3' candle projected from its boundary
-        in the direction implied by the two following '2' candles.
+        Trigger: within a rolling 4-candle window, one candle takes out the
+        reference candle's high AND one candle takes out the reference candle's
+        low.  This inside-out local expansion is the mini broadening signal.
+        Returns the index of the later of the two events, or -1.
         """
         n = len(candles)
-        if n < 4:
+        if n < 3:
             return -1
 
-        # Classify each candle once
-        labels = [
-            self.classify_candle(candles[i], candles[i - 1] if i > 0 else None)
-            for i in range(n)
-        ]
+        WINDOW = 4
 
-        for i in range(1, n - 2):
-            if labels[i] != "3":
-                continue
-            l1 = labels[i + 1]
-            l2 = labels[i + 2] if i + 2 < n else ""
-            # Both following candles must be some flavour of "2"
-            if "2" not in l1 or "2" not in l2:
-                continue
+        for i in range(1, n):
+            ref_high = candles[i - 1]["high_y"]   # prev candle's high
+            ref_low  = candles[i - 1]["low_y"]    # prev candle's low
+            took_high = took_low = False
+            trigger   = i
 
-            three  = candles[i]
-            rng    = three["low_y"] - three["high_y"]   # canvas-pixel range
-            if rng <= 0:
-                continue
-
-            # Direction from the second "2" candle
-            if "U" in l2:
-                # Bullish: target is ABOVE the 3-candle high (lower y)
-                target_y = three["high_y"] - rng
-                for j in range(i + 3, n):
-                    if candles[j]["high_y"] <= target_y:
-                        return j
-            elif "D" in l2:
-                # Bearish: target is BELOW the 3-candle low (higher y)
-                target_y = three["low_y"] + rng
-                for j in range(i + 3, n):
-                    if candles[j]["low_y"] >= target_y:
-                        return j
-            # Ambiguous direction — skip (don't guess)
+            for j in range(i, min(i + WINDOW, n)):
+                if candles[j]["high_y"] < ref_high:   # took out prev high
+                    took_high = True
+                    trigger   = j
+                if candles[j]["low_y"] > ref_low:     # took out prev low
+                    took_low  = True
+                    trigger   = max(trigger, j)
+                if took_high and took_low:
+                    return trigger
 
         return -1
 
@@ -1480,14 +1465,30 @@ class CandlestickDrawerApp:
         """Master broadening draw — called from both static redraw and replay."""
         if not self.show_broadening.get():
             return
-        # Macro formation: full candle history
+
+        # Macro formation: rolling two-point connection across full history
         self._draw_broadening_lines(cv, candles, current, mini=False, start=0)
-        # Mini formation: scoped to post-3-2-2 target hit
-        if self.show_mini_bf.get():
-            start = self._find_mini_bf_start(candles)
-            if start >= 0:
-                self._draw_broadening_lines(cv, candles, current,
-                                             mini=True, start=start)
+
+        if not self.show_mini_bf.get():
+            return
+
+        start = self._find_mini_bf_start(candles)
+        if start < 0:
+            return
+
+        # Dissolution check: mini merges into macro when its running HH or LL
+        # has reached the macro formation's boundary — stop drawing at that point
+        if candles:
+            macro_hh = min(c["high_y"] for c in candles)   # smallest y = highest price
+            macro_ll = max(c["low_y"]  for c in candles)   # largest  y = lowest  price
+            mini_src = candles[start:]
+            if mini_src:
+                mini_hh = min(c["high_y"] for c in mini_src)
+                mini_ll = max(c["low_y"]  for c in mini_src)
+                if mini_hh <= macro_hh or mini_ll >= macro_ll:
+                    return   # dissolved — mini has expanded to macro boundary
+
+        self._draw_broadening_lines(cv, candles, current, mini=True, start=start)
 
     # ── Style Settings modal ─────────────────────────────────────────────────
 
