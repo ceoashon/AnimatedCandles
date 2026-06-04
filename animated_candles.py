@@ -1429,36 +1429,94 @@ class CandlestickDrawerApp:
                            fill=fill, width=width, dash=dash,
                            tags="broadening")
 
-    def _find_mini_bf_start(self, candles: list) -> int:
+    def _compute_mini_broadening(self, candles: list,
+                                  current: dict | None = None) -> tuple:
         """
-        Trigger: within a rolling 4-candle window, one candle takes out the
-        reference candle's high AND one candle takes out the reference candle's
-        low.  This inside-out local expansion is the mini broadening signal.
-        Returns the index of the later of the two events, or -1.
-        """
-        n = len(candles)
-        if n < 3:
-            return -1
+        Compute rolling two-point anchors for the internal (mini) broadening,
+        which operates INDEPENDENTLY inside the macro broadening range.
 
-        WINDOW = 4
+        Algorithm:
+        1. Compute macro boundaries (global running HH / LL across all candles).
+        2. Scan forward tracking internal expansion.  When RESET_GAP consecutive
+           candles produce no new internal HH or LL, treat that as consolidation
+           and start a fresh sequence from the stall point.
+        3. Collect HH / LL pivots for the MOST RECENT expansion sequence.
+        4. Return the last-two pivots of each list (rolling two-point connection).
+        5. Null out any anchor that has reached the macro boundary (dissolution).
+
+        Canvas convention: smaller y = higher price, larger y = lower price.
+        """
+        all_c = list(candles) + ([current] if current else [])
+        n = len(all_c)
+        if n < 3:
+            return None, None, None, None
+
+        # ── Macro boundaries ──────────────────────────────────────────────────
+        macro_hh = min(c["high_y"] for c in all_c)   # smallest y = highest price
+        macro_ll = max(c["low_y"]  for c in all_c)   # largest  y = lowest  price
+
+        # ── Find start of the most recent internal expansion sequence ─────────
+        RESET_GAP = 3          # consecutive non-expanding candles → consolidation
+        seq_start = 0
+        run_hh    = all_c[0]["high_y"]
+        run_ll    = all_c[0]["low_y"]
+        stall     = 0
 
         for i in range(1, n):
-            ref_high = candles[i - 1]["high_y"]   # prev candle's high
-            ref_low  = candles[i - 1]["low_y"]    # prev candle's low
-            took_high = took_low = False
-            trigger   = i
+            c        = all_c[i]
+            expanded = False
+            if c["high_y"] < run_hh:
+                run_hh   = c["high_y"]
+                expanded = True
+            if c["low_y"] > run_ll:
+                run_ll   = c["low_y"]
+                expanded = True
 
-            for j in range(i, min(i + WINDOW, n)):
-                if candles[j]["high_y"] < ref_high:   # took out prev high
-                    took_high = True
-                    trigger   = j
-                if candles[j]["low_y"] > ref_low:     # took out prev low
-                    took_low  = True
-                    trigger   = max(trigger, j)
-                if took_high and took_low:
-                    return trigger
+            if expanded:
+                stall = 0
+            else:
+                stall += 1
+                if stall >= RESET_GAP:
+                    # Sequence resets: new sequence starts where stall began
+                    seq_start = i - RESET_GAP + 1
+                    run_hh    = all_c[seq_start]["high_y"]
+                    run_ll    = all_c[seq_start]["low_y"]
+                    stall     = 0
 
-        return -1
+        # ── Collect internal pivots from seq_start onward ─────────────────────
+        seq = all_c[seq_start:]
+        if len(seq) < 2:
+            return None, None, None, None
+
+        int_hh = seq[0]["high_y"]
+        int_ll = seq[0]["low_y"]
+        hh_pts = [(seq[0]["x"], int_hh)]
+        ll_pts = [(seq[0]["x"], int_ll)]
+
+        for c in seq[1:]:
+            if c["high_y"] < int_hh:
+                int_hh = c["high_y"]
+                hh_pts.append((c["x"], int_hh))
+            if c["low_y"] > int_ll:
+                int_ll = c["low_y"]
+                ll_pts.append((c["x"], int_ll))
+
+        # ── Rolling two-point: last two pivots from each list ─────────────────
+        hh_prev = hh_pts[-2] if len(hh_pts) >= 2 else None
+        hh_last = hh_pts[-1] if len(hh_pts) >= 2 else None
+        ll_prev = ll_pts[-2] if len(ll_pts) >= 2 else None
+        ll_last = ll_pts[-1] if len(ll_pts) >= 2 else None
+
+        # ── Dissolution: mini reaches macro boundary → stop drawing ───────────
+        if hh_last is not None and hh_last[1] <= macro_hh:
+            hh_prev = hh_last = None
+        if ll_last is not None and ll_last[1] >= macro_ll:
+            ll_prev = ll_last = None
+
+        if hh_prev is None and ll_prev is None:
+            return None, None, None, None
+
+        return hh_prev, hh_last, ll_prev, ll_last
 
     def _draw_all_broadening(self, cv: tk.Canvas, candles: list,
                               current: dict | None = None) -> None:
@@ -1472,23 +1530,21 @@ class CandlestickDrawerApp:
         if not self.show_mini_bf.get():
             return
 
-        start = self._find_mini_bf_start(candles)
-        if start < 0:
+        # Internal (mini) formation — fully independent tracking inside macro range
+        hh_p, hh_l, ll_p, ll_l = self._compute_mini_broadening(candles, current)
+        if hh_p is None and ll_p is None:
             return
 
-        # Dissolution check: mini merges into macro when its running HH or LL
-        # has reached the macro formation's boundary — stop drawing at that point
-        if candles:
-            macro_hh = min(c["high_y"] for c in candles)   # smallest y = highest price
-            macro_ll = max(c["low_y"]  for c in candles)   # largest  y = lowest  price
-            mini_src = candles[start:]
-            if mini_src:
-                mini_hh = min(c["high_y"] for c in mini_src)
-                mini_ll = max(c["low_y"]  for c in mini_src)
-                if mini_hh <= macro_hh or mini_ll >= macro_ll:
-                    return   # dissolved — mini has expanded to macro boundary
+        step = self.candle_width + self.candle_spacing
+        ext  = 4 * step
+        fill, width, dash = "#dddddd", 1, (5, 3)   # dashed, thinner, slightly dimmer
 
-        self._draw_broadening_lines(cv, candles, current, mini=True, start=start)
+        if hh_p is not None and hh_l is not None and hh_p != hh_l:
+            cv.create_line(*self._project_line(hh_p, hh_l, ext),
+                           fill=fill, width=width, dash=dash, tags="broadening")
+        if ll_p is not None and ll_l is not None and ll_p != ll_l:
+            cv.create_line(*self._project_line(ll_p, ll_l, ext),
+                           fill=fill, width=width, dash=dash, tags="broadening")
 
     # ── Style Settings modal ─────────────────────────────────────────────────
 
